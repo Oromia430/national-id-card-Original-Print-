@@ -1,69 +1,66 @@
 import os
 import telebot
-import cv2
-import numpy as np
 from PIL import Image
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # 🔑 CONFIGURATION
-# Render irratti Environment Variables keessatti itti dabinna. 
-# Yoo achi dides, Token kee sirriitti mallattoo ':' qabaachuu isaa mirkaneeffadhuu as keessa kaa'i.
-TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '7238260846:AAFlYgXpYl2gXvOz_VfP2M7wWhxEXAMPLE')  
-ADMIN_ID = 123456789  # Chat ID kee (Elias) as keessa kaa'i lakkofsa qofa
+TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8974775722:AAEdkBUxx02cwzLLzGT6Fa5hqSWtveqGz6A')  
+ADMIN_ID = int(os.environ.get('ADMIN_CHAT_ID', 123654987))
 
 bot = telebot.TeleBot(TOKEN)
 
-# DATABASE YEROO GABAABAA
 USER_STATES = {}   
 USER_IMAGES = {}   
 PAID_USERS = {}    
 
-# --- HOJII IMAGE PROCESSING (CROP & ALIGN) ---
+# 🗄️ TRANSACTION DATABASE (Kaffaltii lama akka hin fayyadamne ittisuuf)
+USED_TRANSACTIONS = set()
 
-def auto_crop_id(image_path):
-    """Fakkii screenshot keessaa kaardii Fayda ID qofa bifa sirriin addaan baasa"""
-    img = cv2.imread(image_path)
-    if img is None:
-        return None
+# --- HOJII FAKKII VERTICAL ORIGINAL QAJEELCHUU ---
+
+def crop_vertical_card(image_path, target_w=638, target_h=1011):
+    """Fakkii screenshot keessaa kaardicha bifa original vertical ta'een mura"""
+    img = Image.open(image_path)
+    w_orig, h_orig = img.size
+    
+    # 1. Screenshot gubbaa fi jala irraa UI ballessuuf muruu
+    left = int(w_orig * 0.05)
+    top = int(h_orig * 0.15)
+    right = int(w_orig * 0.95)
+    bottom = int(h_orig * 0.83)
+    cropped_img = img.crop((left, top, right, bottom))
+    
+    # 2. 🔥 FIX: Aspect ratio bifa vertical ($638 \times 1011$) eeguu
+    target_ratio = target_w / target_h
+    crop_w, crop_h = cropped_img.size
+    current_ratio = crop_w / crop_h
+    
+    if current_ratio > target_ratio:
+        new_width = int(target_ratio * crop_h)
+        offset = (crop_w - new_width) // 2
+        final_cropped = cropped_img.crop((offset, 0, crop_w - offset, crop_h))
+    else:
+        new_height = int(crop_w / target_ratio)
+        offset = (crop_h - new_height) // 2
+        final_cropped = cropped_img.crop((0, offset, crop_w, crop_h - offset))
         
-    h_orig, w_orig, _ = img.shape
-    
-    # Gubbaa fi jala irraa kofalchiftoota bilbilaa (buttons) muranii balleessuu
-    start_x = int(w_orig * 0.05)
-    start_y = int(h_orig * 0.14)
-    end_x = int(w_orig * 0.95)
-    end_y = int(h_orig * 0.84)
-    
-    cropped = img[start_y:end_y, start_x:end_x]
-    
-    # Qulqullina qubeewwanii dabaluu (Sharpening Filter)
-    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-    enhanced = cv2.filter2D(cropped, -1, kernel)
-    return enhanced
+    return final_cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
 def create_final_id_template(front_path, back_path, output_path):
-    """Kaardii lamaan qulqullinaan CR-80 standardiin bifa sirriin walbira qaba"""
-    front_cv = auto_crop_id(front_path)
-    back_cv = auto_crop_id(back_path)
+    """Kaardii fuulduraa fi duubaa qulqullinaan bifa original vertical ta'een walbira qaba"""
+    front_final = crop_vertical_card(front_path)
+    back_final = crop_vertical_card(back_path)
     
-    # OpenCV to Pillow Image geeddaruu
-    front_pil = Image.fromarray(cv2.cvtColor(front_cv, cv2.COLOR_BGR2RGB))
-    back_pil = Image.fromarray(cv2.cvtColor(back_cv, cv2.COLOR_BGR2RGB))
-    
-    # Standard CR-80 Size ($1011 \times 638$ Pixels)
-    card_w, card_h = 1011, 638
-    front_final = front_pil.resize((card_w, card_h), Image.Resampling.LANCZOS)
-    back_final = back_pil.resize((card_w, card_h), Image.Resampling.LANCZOS)
-    
-    # CANVAS ADII (White Background)
+    # Standard CR-80 Vertical Size
+    card_w, card_h = 638, 1011
     margin_x = 60  
     margin_y = 90  
     
+    # Kaardii lamaan walbira fiduuf canvas bal'isuu
     canvas_w = (card_w * 2) + (margin_x * 3)
     canvas_h = card_h + (margin_y * 2)
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     
-    # Fakkiiwwan bifa sirriin walbira kaa'uu (Kofni isaanii akka hin garagalleef)
+    # Maxxansuu (Fuuldura = Bitaa, Duuba = Mirga) bifa qajeelaan
     canvas.paste(front_final, (margin_x, margin_y))
     canvas.paste(back_final, (card_w + (margin_x * 2), margin_y))
     
@@ -87,8 +84,8 @@ def start_cmd(message):
             f"📌 *Telebirr:* `0913701367`\n\n"
             f"Erga kaffaltanii booda 'Kaffaltii Mirkaneessi' kan jedhu cuqaasaa.")
     
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("✅ Kaffaltii Mirkaneessi", callback_data="verify_tx"))
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(telebot.types.InlineKeyboardButton("✅ Kaffaltii Mirkaneessi", callback_data="verify_tx"))
     bot.send_message(user_id, text, reply_markup=markup, parse_mode='Markdown')
 
 
@@ -102,20 +99,28 @@ def handle_callbacks(call):
 @bot.message_handler(func=lambda message: USER_STATES.get(message.from_user.id) == 'Eegaa_Transaction_Number')
 def verify_transaction_number(message):
     user_id = message.from_user.id
-    input_tx = message.text.strip()
+    input_tx = message.text.strip().upper()  # Qubeewwan gurguddaatti jijjiuruu
     
-    # AUTOMATIC APPROVAL LOGIC (Jecha dheerina qubee 6 ol jiru kamiyyuu ni fudhata)
-    if len(input_tx) >= 6:
-        PAID_USERS[user_id] = True
-        USER_STATES[user_id] = 'Eegaa_Fuulduraa'
+    # 🔒 CHECKER 1: Gabaabbina lakkofsichaa (Soba ta'uu isaa beekuuf)
+    if len(input_tx) < 8:
+        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi daddabarsaa ati galchite baay'ee gabaabaadha. Maaloo lakkofsa sirrii galchi.")
+        return
+
+    # 🔒 CHECKER 2: Duraan itti hojjetameera yoo ta'e (Soba/Gowwoomsaa)
+    if input_tx in USED_TRANSACTIONS:
+        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi kaffaltii kun duraan tajaajila biraaf itti hojjetameera! Gowwoomsaan dhowwamaadha.")
+        return
         
-        bot.reply_to(message, "🎉 Kaffaltiin keessan of-caalaatti mirkanaa'eera! Hojii keenya ni jalqabna.\n\n👉 Maaloo fakkii ID keetii kan *GARA FUULDURAA* (Front) ergi.")
-        try:
-            bot.send_message(ADMIN_ID, f"🔔 [AUTO-APPROVED]: User {user_id} lakkoofsa `{input_tx}` tajaajila baneera.")
-        except Exception:
-            pass
-    else:
-        bot.reply_to(message, "❌ Lakkoofsi daddabarsaa ati ergite sirrii miti. Maaloo lakkofsa sirrii galchi.")
+    # Kaffaltii dhugaa fudhachuu
+    USED_TRANSACTIONS.add(input_tx)
+    PAID_USERS[user_id] = True
+    USER_STATES[user_id] = 'Eegaa_Fuulduraa'
+    
+    bot.reply_to(message, "🎉 Kaffaltiin keessan mirkanaa'eera! Amma hojii ni jalqabna.\n\n👉 Maaloo fakkii ID keetii kan *GARA FUULDURAA* (Front) ergi.")
+    try:
+        bot.send_message(ADMIN_ID, f"🔔 [APPROVED]: User {user_id} lakkoofsa `{input_tx}` kaffaltii raawwateera.")
+    except Exception:
+        pass
 
 
 @bot.message_handler(content_types=['photo'])
@@ -146,21 +151,18 @@ def handle_id_photos(message):
             f.write(downloaded)
             
         USER_IMAGES[user_id]['back'] = back_path
-        bot.reply_to(message, "⏳ Nu eegi, fakkicha qulqulleessinee dizaayinii isaa sirreessaa jirra...")
+        bot.reply_to(message, "⏳ Nu eegi, fakkicha original bifa vertical qulqulluun sirreessaa jirra...")
         
         try:
             front = USER_IMAGES[user_id]['front']
             back = USER_IMAGES[user_id]['back']
             output_final = f"print_ready_{user_id}.jpg"
             
-            # Hojii Template-ii raawwachuu
             create_final_id_template(front, back, output_final)
             
-            # Fakkii qophaa'e deebisanii erguu
             with open(output_final, 'rb') as photo:
-                bot.send_photo(user_id, photo, caption="🎉 Kunoo Fayda ID keessan bifa kanaan print-fii qophaa'eera! Hojii gaarii.")
+                bot.send_photo(user_id, photo, caption="🎉 Kunoo Fayda ID keessan bifa original kofni isaa eegameen qophaa'eera! Hojii gaarii.")
                 
-            # Files irraa qulqulleessuu
             os.remove(front)
             os.remove(back)
             os.remove(output_final)
