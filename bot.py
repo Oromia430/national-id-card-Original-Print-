@@ -17,28 +17,30 @@ USED_TRANSACTIONS = set()
 
 # --- HOJII FAKKII VERTICAL ORIGINAL QAJEELCHUU ---
 
-def crop_vertical_card(image_path, target_w=638, target_h=1011):
-    """Fakkii screenshot keessaa kaardicha bifa original vertical ta'een mura"""
+def process_vertical_card(image_path, target_w=638, target_h=1011):
+    """Screenshot guutuu keessaa kaardicha bifa original vertical ta'een qofa muree baasa"""
     img = Image.open(image_path)
     w_orig, h_orig = img.size
     
-    # 1. Screenshot gubbaa fi jala irraa UI ballessuuf muruu
-    left = int(w_orig * 0.05)
-    top = int(h_orig * 0.15)
-    right = int(w_orig * 0.95)
-    bottom = int(h_orig * 0.83)
+    # 1. Screenshot gubbaa fi jala irraa UI qulqulleessuuf muruu
+    left = int(w_orig * 0.03)
+    top = int(h_orig * 0.12)
+    right = int(w_orig * 0.97)
+    bottom = int(h_orig * 0.86)
     cropped_img = img.crop((left, top, right, bottom))
     
-    # 2. Aspect ratio bifa vertical ($638 \times 1011$) eeguu
+    # 2. Aspect Ratio bifa vertical original ($638 \times 1011$) eeguu
     target_ratio = target_w / target_h
     crop_w, crop_h = cropped_img.size
     current_ratio = crop_w / crop_h
     
     if current_ratio > target_ratio:
+        # Fakkichi baay'ee yoo bal'ate bitaa fi mirgatti qajeelchuu
         new_width = int(target_ratio * crop_h)
         offset = (crop_w - new_width) // 2
         final_cropped = cropped_img.crop((offset, 0, crop_w - offset, crop_h))
     else:
+        # Fakkichi baay'ee yoo dheerate gubbaa fi jalatti qajeelchuu
         new_height = int(crop_w / target_ratio)
         offset = (crop_h - new_height) // 2
         final_cropped = cropped_img.crop((0, offset, crop_w, crop_h - offset))
@@ -46,21 +48,21 @@ def crop_vertical_card(image_path, target_w=638, target_h=1011):
     return final_cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
 def create_final_id_template(front_path, back_path, output_path):
-    """Kaardii fuulduraa fi duubaa qulqullinaan bifa original vertical ta'een walbira qaba"""
-    front_final = crop_vertical_card(front_path)
-    back_final = crop_vertical_card(back_path)
+    """Fuulduraa fi duubaa otoo hin dhiphisin bifa original vertical ta'een walbira qaba"""
+    front_final = process_vertical_card(front_path)
+    back_final = process_vertical_card(back_path)
     
-    # Standard CR-80 Vertical Size
+    # Standard CR-80 Vertical Size (Akkuma original fakkii ati ergitee)
     card_w, card_h = 638, 1011
     margin_x = 60  
     margin_y = 90  
     
-    # Kaardii lamaan walbira fiduuf canvas bal'isuu
+    # Canvas bal'aa fakkii lamaan bifa qajeelaan qabatu qopheessuu
     canvas_w = (card_w * 2) + (margin_x * 3)
     canvas_h = card_h + (margin_y * 2)
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     
-    # Maxxansuu (Fuuldura = Bitaa, Duuba = Mirga) bifa qajeelaan
+    # Maxxansuu (Fuuldura = Bitaa, Duuba = Mirga) bifa qajeelaan otoo hin dhiphatin
     canvas.paste(front_final, (margin_x, margin_y))
     canvas.paste(back_final, (card_w + (margin_x * 2), margin_y))
     
@@ -101,17 +103,16 @@ def verify_transaction_number(message):
     user_id = message.from_user.id
     input_tx = message.text.strip().upper()
     
-    # 🔒 CHECKER 1: Gabaabbina lakkofsichaa (Yoo gabaabaa ta'e soba)
+    # 🔒 CHECKER 1: Gowwoomsaa lakkofsa gabaabaa ittisuu
     if len(input_tx) < 8 or not input_tx.isalnum():
         bot.reply_to(message, "❌ Dogoggora: Lakkoofsi daddabarsaa ati galchite sirrii miti ykn baay'ee gabaabaadha. Maaloo lakkofsa sirrii galchi.")
         return
 
-    # 🔒 CHECKER 2: Duraan itti hojjetameera yoo ta'e (Gowwoomsaa)
+    # 🔒 CHECKER 2: Lakkofsa tokko daddabalanii fayyadamuu ittisuu
     if input_tx in USED_TRANSACTIONS:
         bot.reply_to(message, "❌ Dogoggora: Lakkoofsi kaffaltii kun duraan tajaajila biraaf itti hojjetameera! Gowwoomsaan dhowwamaadha.")
         return
         
-    # Kaffaltii dhugaa fudhachuu
     USED_TRANSACTIONS.add(input_tx)
     PAID_USERS[user_id] = True
     USER_STATES[user_id] = 'Eegaa_Fuulduraa'
@@ -174,5 +175,7 @@ def handle_id_photos(message):
         except Exception as e:
             bot.reply_to(message, f"Dogoggora uumameera: {str(e)}")
 
+# Webhook qulqulleessuu fi dammaqsuu
+bot.remove_webhook()
 print("Botiin kee haaraatti qophaa'eera...")
-bot.infinity_polling()
+bot.infinity_polling(skip_pending=True)
