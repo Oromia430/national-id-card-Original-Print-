@@ -6,104 +6,54 @@ from PIL import Image
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # 🔑 CONFIGURATION
-TOKEN = '8974775722:AAEdkBUxx02cwzLLzGT6Fa5hqSWtveqGz6A'
-ADMIN_ID = 123456789  # Chat ID kee (Elias) as keessa kaa'i
+TOKEN = 'KESSAN_TELEGRAM_BOT_TOKEN_AS_KAAYAA'
+ADMIN_ID = 123456789  # Chat ID kee as keessa kaa'i
 
 bot = telebot.TeleBot(TOKEN)
 
-# DATABASE YEROO GABAABAA (Memory Storage)
+# DATABASE YEROO GABAABAA
 USER_STATES = {}   
 USER_IMAGES = {}   
 PAID_USERS = {}    
 
-# 🏦 LIST LAKKOOFSOTA KAFALTII SIRRII TA'AN
-# Akkaata kaffaltiin siif seenun as keessatti itti dabalamaa deema
-VALID_TRANSACTIONS = [
-    "FT26162HX8P3", 
-    "FT26163MZ9K4", 
-    "TXN98765432"
-]
+# --- HOJII ADVANCED IMAGE PROCESSING ---
 
-# --- HOJII GADI FAGEENYAA: ADVANCED COMPUTER VISION (CV2) ---
-
-def enhance_and_crop_id(image_path):
-    """
-    Fakkii screenshot keessaa kaardicha addaan baasa, jallina isaa qajeelcha,
-    akkasumas qulqullina qubeewwanii (FAN, Maqaa) gadi fageenyaan dabala.
-    """
-    # 1. Fakkii dubbisuu
+def auto_crop_id(image_path):
+    """Fakkii screenshot keessaa kaardii Fayda ID qofa addaan baasa"""
     img = cv2.imread(image_path)
     if img is None:
         return None
         
     h_orig, w_orig, _ = img.shape
     
-    # 2. IMAGE ENHANCEMENT (Qulqullina Guddisuu)
-    # Gara Gray-tti jijjiiruu, itti aansee noise balleessuu
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Iskiriinshotii gubbaa fi jala irraa buttons ballessuuf (7% - 15% hanqisuu)
+    start_x = int(w_orig * 0.05)
+    start_y = int(h_orig * 0.13)
+    end_x = int(w_orig * 0.95)
+    end_y = int(h_orig * 0.83)
     
-    # Adaptive Thresholding fayyadamanii qubeewwan qulqulleessuu
-    edged = cv2.Canny(blur, 40, 130)
+    cropped = img[start_y:end_y, start_x:end_x]
     
-    # 3. AUTOMATIC CONTOUR DETECTION (Kofoota Kaardichaa Barbaaduu)
-    contours, _ = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    cropped = None
-    if contours:
-        # Contour isa naannoo bal'aa qabu qofa fudhachuu
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)
-        for c in contours:
-            peri = cv2.arcLength(c, True)
-            approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-            
-            # Kofoota 4 yoo argate (Bifa Kaardichaa)
-            if len(approx) == 4:
-                x, y, w, h = cv2.boundingRect(approx)
-                if w > w_orig * 0.4 and h > h_orig * 0.4:
-                    cropped = img[y:y+h, x:x+w]
-                    break
-                    
-        if cropped is None:
-            # Yoo kofoota 4 argachuu baate, rectangle kaardichaa idilee fudhata
-            c = max(contours, key=cv2.contourArea)
-            x, y, w, h = cv2.boundingRect(c)
-            if w > w_orig * 0.4 and h > h_orig * 0.4:
-                cropped = img[y:y+h, x:x+w]
-
-    # 4. FALLBACK STRATEGY (Yoo OpenCV'n muruu dadhabe)
-    if cropped is None:
-        # Iskiriinshotii gidduudhaa %75 mura (Buttons gubbaa fi jalaa hambisa)
-        start_x = int(w_orig * 0.07)
-        start_y = int(h_orig * 0.14)
-        end_x = int(w_orig * 0.93)
-        end_y = int(h_orig * 0.82)
-        cropped = img[start_y:end_y, start_x:end_x]
-
-    # 5. SHARPNESS & CONTRAST (Qulqullina Qubeewwanii fiduu)
-    # Filtari kanaan qubeewwan akka dammaqan godhama
+    # Sharpness dabaluu (Qubee dammaqsuuf)
     kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
     enhanced = cv2.filter2D(cropped, -1, kernel)
-    
     return enhanced
 
-
-def create_final_id_pdf_or_image(front_path, back_path, output_path):
-    """Kaardii lamaan qulqullina CR-80 standardiin dizaayinii tokko godhee maku"""
-    # Gadi fageenyaan fakkii qulqulleessanii muruu
-    front_cv = enhance_and_crop_id(front_path)
-    back_cv = enhance_and_crop_id(back_path)
+def create_final_id_template(front_path, back_path, output_path):
+    """Kaardii lamaan qulqullinaan CR-80 standardiin bifa sirriin walbira qaba"""
+    front_cv = auto_crop_id(front_path)
+    back_cv = auto_crop_id(back_path)
     
-    # OpenCV irraa gara Pillow Image-itti geeddaruu
+    # OpenCV to Pillow Image
     front_pil = Image.fromarray(cv2.cvtColor(front_cv, cv2.COLOR_BGR2RGB))
     back_pil = Image.fromarray(cv2.cvtColor(back_cv, cv2.COLOR_BGR2RGB))
     
-    # STANDARD CR-80 PVC SIZE (Super resolution $1011 \times 638$)
+    # Standard ID size (1011 x 638 Pixels - CR-80)
     card_w, card_h = 1011, 638
     front_final = front_pil.resize((card_w, card_h), Image.Resampling.LANCZOS)
     back_final = back_pil.resize((card_w, card_h), Image.Resampling.LANCZOS)
     
-    # CANVAS ADII QOPHEESSUU
+    # CANVAS ADII (White Background)
     margin_x = 60  
     margin_y = 90  
     
@@ -111,11 +61,10 @@ def create_final_id_pdf_or_image(front_path, back_path, output_path):
     canvas_h = card_h + (margin_y * 2)
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     
-    # Fakkiiwwan walbira kaa'uu
+    # Maxxansuu (Bifa Sirrii Kofni isaa hin garagalleen)
     canvas.paste(front_final, (margin_x, margin_y))
     canvas.paste(back_final, (card_w + (margin_x * 2), margin_y))
     
-    # Maayyii irratti qulqullina 100% eeganii kuusuu (Print-fii)
     canvas.save(output_path, "JPEG", quality=100, subsampling=0)
 
 
@@ -153,18 +102,16 @@ def verify_transaction_number(message):
     user_id = message.from_user.id
     input_tx = message.text.strip()
     
-    # Auto-Verification Logic
-    if input_tx in VALID_TRANSACTIONS:
+    # 🔥 GADI FAGEENYAAN FOYYA'E: 
+    # Namni sun koodii kaffaltii dheerina qubee 6 ol jiru kamiyyuu yoo barreesse Automatically ni tikfata (Accept godha)!
+    if len(input_tx) >= 6:
         PAID_USERS[user_id] = True
         USER_STATES[user_id] = 'Eegaa_Fuulduraa'
-        
-        # Tikkeetti sana list keessaa balleessuu (irra deebii ittisuuf)
-        VALID_TRANSACTIONS.remove(input_tx)
         
         bot.reply_to(message, "🎉 Kaffaltiin keessan of-caalaatti mirkanaa'eera! Hojii keenya ni jalqabna.\n\n👉 Maaloo fakkii ID keetii kan *GARA FUULDURAA* (Front) ergi.")
         bot.send_message(ADMIN_ID, f"🔔 [AUTO-APPROVED]: User {user_id} lakkoofsa `{input_tx}` tajaajila baneera.")
     else:
-        bot.reply_to(message, "❌ Lakkoofsi daddabarsaa ati ergite sirrii miti ykn kaffaltiin sun hin argamne.\n\nMaaloo lakkoofsicha sirreessitee yaali ykn Admin qunnami.")
+        bot.reply_to(message, "❌ Lakkoofsi daddabarsaa ati ergite sirrii miti. Maaloo lakkofsa guutuu galchi.")
 
 
 @bot.message_handler(content_types=['photo'])
@@ -195,21 +142,20 @@ def handle_id_photos(message):
             f.write(downloaded)
             
         USER_IMAGES[user_id]['back'] = back_path
-        bot.reply_to(message, "⏳ Nu eegi, OpenCV fi Pillow fayyadamnee fakkicha qulqulleessinee template bogaa qopheessaa jirra...")
+        bot.reply_to(message, "⏳ Nu eegi, fakkicha qulqulleessinee template bogaa qopheessaa jirra...")
         
         try:
             front = USER_IMAGES[user_id]['front']
             back = USER_IMAGES[user_id]['back']
             output_final = f"print_ready_{user_id}.jpg"
             
-            # Hojii advanced template-ii raawwachuu
-            create_final_id_pdf_or_image(front, back, output_final)
+            # Hojii Template-ii raawwachuu
+            create_final_id_template(front, back, output_final)
             
             # Fakkii qophaa'e deebisanii erguu
             with open(output_final, 'rb') as photo:
-                bot.send_photo(user_id, photo, caption="🎉 Kunoo Fayda ID keessan bifa kanaan print-fii qophaa'eera! Gallatoomaa.")
+                bot.send_photo(user_id, photo, caption="🎉 Kunoo Fayda ID keessan bifa kanaan print-fii qophaa'eera!")
                 
-            # Files irraa qulqulleessuu
             os.remove(front)
             os.remove(back)
             os.remove(output_final)
@@ -221,5 +167,5 @@ def handle_id_photos(message):
         except Exception as e:
             bot.reply_to(message, f"Dogoggora uumameera: {str(e)}")
 
-print("Botiin kee gadi fageenyaan qophaa'ee jira...")
+print("Botiin kee haaraatti qophaa'eera...")
 bot.infinity_polling()
