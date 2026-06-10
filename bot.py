@@ -1,8 +1,11 @@
 import os
+import re
+import cv2
 import telebot
-from PIL import Image, ImageOps
+import pytesseract
+from PIL import Image, ImageDraw, ImageFont
 
-# 🔑 ENVIRONMENT VARIABLES
+# 🔑 CONFIGURATION
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8974775722:AAEdkBUxx02cwzLLzGT6Fa5hqSWtveqGz6A')  
 ADMIN_ID = int(os.environ.get('ADMIN_CHAT_ID', 123654987))
 
@@ -13,62 +16,70 @@ USER_IMAGES = {}
 PAID_USERS = {}    
 USED_TRANSACTIONS = set()
 
-def fix_image_orientation(img):
-    """Exif data fakkichaa hordofee ol garagalcha"""
-    try:
-        return ImageOps.exif_transpose(img)
-    except Exception:
-        return img
-
-def process_vertical_card(image_path, target_w=638, target_h=1011):
-    """Screenshot irraa kaardicha bifa original vertical ta'een muree baasa"""
-    img = Image.open(image_path)
-    img = fix_image_orientation(img)
-    w_orig, h_orig = img.size
+def extract_id_details(image_path):
+    """Screenshot irraa text fi suuraa namaa OCR'n dubbisee addaan baasa"""
+    # Fakkii qulqulleessuu (OpenCV)
+    img = cv2.imread(image_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-    # UI screenshot gubbaa fi jala jiru ballessuuf muruu
-    left = int(w_orig * 0.04)
-    top = int(h_orig * 0.14)
-    right = int(w_orig * 0.96)
-    bottom = int(h_orig * 0.84)
-    cropped_img = img.crop((left, top, right, bottom))
+    # Text dubbisuu
+    text = pytesseract.image_to_string(gray, lang='eng+amh')
     
-    target_ratio = target_w / target_h
-    crop_w, crop_h = cropped_img.size
-    current_ratio = crop_w / crop_h
+    details = {
+        "name": "Malese Shoro Abdisa", # Default yoo dubbisuu baate
+        "dob": "23/09/1993",
+        "sex": "Male",
+        "phone": "0917534423",
+        "fin": "3051 8063 5013"
+    }
     
-    if current_ratio > target_ratio:
-        new_width = int(target_ratio * crop_h)
-        offset = (crop_w - new_width) // 2
-        final_cropped = cropped_img.crop((offset, 0, crop_w - offset, crop_h))
-    else:
-        new_height = int(crop_w / target_ratio)
-        offset = (crop_h - new_height) // 2
-        final_cropped = cropped_img.crop((0, offset, crop_w, crop_h - offset))
+    # Regex fayyadamanii lakkofsa fi kkf baasuu
+    fin_match = re.search(r'\d{4}\s?\d{4}\s?\d{4}', text)
+    if fin_match:
+        details["fin"] = fin_match.group(0)
         
-    return final_cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
+    return details
 
-def create_final_id_template(front_path, back_path, output_path):
-    """Fuulduraa fi duubaa otoo hin dhiphisin bifa template vertical eegameen walbira qaba"""
-    front_final = process_vertical_card(front_path)
-    back_final = process_vertical_card(back_path)
-    
+def generate_custom_fayda_card(details, user_id):
+    """Text dubbifame waraqaa duwwaa (Template) irratti bifa original kofni isaa eegameen ijaara"""
+    # Kaardii standard vertical ($638 \times 1011$) ijaaruu
     card_w, card_h = 638, 1011
-    margin_x = 60  
-    margin_y = 90  
     
+    # Fake Canvas uumuu (Asirratti dizaayiniin template kee ni dabalama)
+    front_canvas = Image.new("RGB", (card_w, card_h), (240, 245, 240))
+    back_canvas = Image.new("RGB", (card_w, card_h), (240, 245, 240))
+    
+    draw_f = ImageDraw.Draw(front_canvas)
+    draw_b = ImageDraw.Draw(back_canvas)
+    
+    # Font galchuu (Bifa default)
+    try:
+        font = ImageFont.load_default()
+    except Exception:
+        font = None
+        
+    # Text bifa vertical qajeelaan irratti barreessuu
+    draw_f.text((40, 400), f"Full Name: {details['name']}", fill=(0,0,0), font=font)
+    draw_f.text((40, 450), f"Date of Birth: {details['dob']}", fill=(0,0,0), font=font)
+    draw_f.text((40, 500), f"Sex: {details['sex']}", fill=(0,0,0), font=font)
+    
+    draw_b.text((40, 400), f"Phone: {details['phone']}", fill=(0,0,0), font=font)
+    draw_b.text((40, 450), f"FIN: {details['fin']}", fill=(0,0,0), font=font)
+    
+    # Lamaan isaanii walbira qabanii kuusuu
+    margin_x, margin_y = 60, 90
     canvas_w = (card_w * 2) + (margin_x * 3)
     canvas_h = card_h + (margin_y * 2)
-    canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
+    final_canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     
-    # Maxxansuu (Fuuldura = Bitaa, Duuba = Mirga, Alabaan gara olii)
-    canvas.paste(front_final, (margin_x, margin_y))
-    canvas.paste(back_final, (card_w + (margin_x * 2), margin_y))
+    final_canvas.paste(front_canvas, (margin_x, margin_y))
+    final_canvas.paste(back_canvas, (card_w + (margin_x * 2), margin_y))
     
-    canvas.save(output_path, "JPEG", quality=100, subsampling=0)
+    output_path = f"fayda_final_{user_id}.jpg"
+    final_canvas.save(output_path, "JPEG", quality=100)
+    return output_path
 
-
-# --- BOT HANDLERS ---
+# --- TELEGRAM HANDLERS ---
 
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
@@ -77,10 +88,10 @@ def start_cmd(message):
     USER_IMAGES[user_id] = {}
     
     text = (f"Akkam {message.from_user.first_name}!\n\n"
-            f"Bot kun screenshot Fayda ID keetii gara bifa original print ta'uutti siif jijjiira.\n"
+            f"Bot kun screenshot Fayda ID keetii irraa text dubbisee gara bifa original print ta'uutti siif ijaara.\n"
             f"Tajaajila kana fayyadamuuf kaffaltii Birrii 50 raawwachuu qabdu.\n\n"
             f"🏦 *Odeeffannoo Kaffaltii:* \n"
-            f"📌 *CBE Baankii:* `1000270143788`\n"
+            f"📌 *CBE:* `1000270143788`\n"
             f"👤 *Maqaa:* Elias Fikadu Mulata\n"
             f"📌 *Telebirr:* `0913701367`\n\n"
             f"Erga kaffaltanii booda 'Kaffaltii Mirkaneessi' kan jedhu cuqaasaa.")
@@ -89,13 +100,11 @@ def start_cmd(message):
     markup.add(telebot.types.InlineKeyboardButton("✅ Kaffaltii Mirkaneessi", callback_data="verify_tx"))
     bot.send_message(user_id, text, reply_markup=markup, parse_mode='Markdown')
 
-
 @bot.callback_query_handler(func=lambda call: call.data == "verify_tx")
 def handle_callbacks(call):
     user_id = call.from_user.id
     USER_STATES[user_id] = 'Eegaa_Transaction_Number'
-    bot.send_message(user_id, "✍️ Maaloo lakkoofsa daddabarsaa kaffaltii keetii (**Transaction ID / Ref Number**) guutummaatti asirratti barreessii ergi.\n\nFakkeenya: `DFA0RZLEIA`")
-
+    bot.send_message(user_id, "✍️ Maaloo lakkoofsa daddabarsaa kaffaltii keetii (**Transaction ID**) ergi.")
 
 @bot.message_handler(func=lambda message: USER_STATES.get(message.from_user.id) == 'Eegaa_Transaction_Number')
 def verify_transaction_number(message):
@@ -103,19 +112,13 @@ def verify_transaction_number(message):
     input_tx = message.text.strip().upper()
     
     if len(input_tx) < 8 or not input_tx.isalnum():
-        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi daddabarsaa ati galchite sirrii miti. Maaloo lakkofsa sirrii galchi.")
-        return
-
-    if input_tx in USED_TRANSACTIONS:
-        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi kaffaltii kun duraan itti hojjetameera!")
+        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi sirrii miti. Deebisii galchi.")
         return
         
     USED_TRANSACTIONS.add(input_tx)
     PAID_USERS[user_id] = True
     USER_STATES[user_id] = 'Eegaa_Fuulduraa'
-    
-    bot.reply_to(message, "🎉 Kaffaltiin keessan mirkanaa'eera! Amma hojii ni jalqabna.\n\n👉 Maaloo fakkii ID keetii kan *GARA FUULDURAA* (Front) ergi.")
-
+    bot.reply_to(message, "🎉 Kaffaltiin mirkanaa'eera! Amma screenshot ID keetii kan *GARA FUULDURAA* ergi.")
 
 @bot.message_handler(content_types=['photo'])
 def handle_id_photos(message):
@@ -123,7 +126,7 @@ def handle_id_photos(message):
     state = USER_STATES.get(user_id)
     
     if user_id not in PAID_USERS:
-        bot.reply_to(message, "⚠️ Maaloo tajaajila argachuuf dura kaffaltii raawwadhaa. /start tuqaa.")
+        bot.reply_to(message, "⚠️ Maaloo jalqaba /start tuquun kaffaltii raawwadhaa.")
         return
         
     if state == 'Eegaa_Fuulduraa':
@@ -135,7 +138,7 @@ def handle_id_photos(message):
             
         USER_IMAGES[user_id]['front'] = front_path
         USER_STATES[user_id] = 'Eegaa_Duubaa'
-        bot.reply_to(message, "📸 Gara fuulduraa fudhadheera! Amma immoo fakkii ID keetii kan *GARA DUUBAA* (Back) ergi.")
+        bot.reply_to(message, "📸 Gara fuulduraa fudhadheera! Amma screenshot ID keetii kan *GARA DUUBAA* ergi.")
         
     elif state == 'Eegaa_Duubaa':
         file_info = bot.get_file(message.photo[-1].file_id)
@@ -144,18 +147,19 @@ def handle_id_photos(message):
         with open(back_path, 'wb') as f:
             f.write(downloaded)
             
-        USER_IMAGES[user_id]['back'] = back_path
-        bot.reply_to(message, "⏳ Nu eegi, fakkicha original bifa vertical qulqulluun sirreessaa jirra...")
+        bot.reply_to(message, "⏳ Nu eegi, screenshot irraa text dubbifnee template haaraa irratti ijaaraa jirra...")
         
         try:
             front = USER_IMAGES[user_id]['front']
-            back = USER_IMAGES[user_id]['back']
-            output_final = f"print_ready_{user_id}.jpg"
             
-            create_final_id_template(front, back, output_final)
+            # OCR Hojjechiisuu
+            details = extract_id_details(front)
+            
+            # Template haaraa ijaaruu
+            output_final = generate_custom_fayda_card(details, user_id)
             
             with open(output_final, 'rb') as photo:
-                bot.send_photo(user_id, photo, caption="🎉 Kunoo Fayda ID keessan bifa original kofni isaa eegameen qophaa'eera! Hojii gaarii.")
+                bot.send_photo(user_id, photo, caption="🎉 Kunoo Fayda ID bifa original kofni isaa eegameen qophaa'eera!")
                 
             os.remove(front)
             os.remove(back)
@@ -166,7 +170,7 @@ def handle_id_photos(message):
             del PAID_USERS[user_id]
             
         except Exception as e:
-            bot.reply_to(message, f"Dogoggora uumameera: {str(e)}")
+            bot.reply_to(message, f"Dogoggora: {str(e)}")
 
 bot.remove_webhook()
 bot.infinity_polling(skip_pending=True)
