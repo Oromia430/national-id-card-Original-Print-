@@ -12,7 +12,7 @@ USER_STATES = {}
 USER_IMAGES = {}   
 PAID_USERS = {}    
 
-# 🗄️ TRANSACTION DATABASE (Kaffaltii lama akka hin fayyadamne ittisuuf)
+# 🗄️ TRANSACTION DATABASE (Kaffaltii daddabalame ittisuuf)
 USED_TRANSACTIONS = set()
 
 # --- HOJII FAKKII VERTICAL ORIGINAL QAJEELCHUU ---
@@ -29,7 +29,7 @@ def crop_vertical_card(image_path, target_w=638, target_h=1011):
     bottom = int(h_orig * 0.83)
     cropped_img = img.crop((left, top, right, bottom))
     
-    # 2. 🔥 FIX: Aspect ratio bifa vertical ($638 \times 1011$) eeguu
+    # 2. Aspect ratio bifa vertical ($638 \times 1011$) eeguu
     target_ratio = target_w / target_h
     crop_w, crop_h = cropped_img.size
     current_ratio = crop_w / crop_h
@@ -99,14 +99,14 @@ def handle_callbacks(call):
 @bot.message_handler(func=lambda message: USER_STATES.get(message.from_user.id) == 'Eegaa_Transaction_Number')
 def verify_transaction_number(message):
     user_id = message.from_user.id
-    input_tx = message.text.strip().upper()  # Qubeewwan gurguddaatti jijjiuruu
+    input_tx = message.text.strip().upper()
     
-    # 🔒 CHECKER 1: Gabaabbina lakkofsichaa (Soba ta'uu isaa beekuuf)
-    if len(input_tx) < 8:
-        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi daddabarsaa ati galchite baay'ee gabaabaadha. Maaloo lakkofsa sirrii galchi.")
+    # 🔒 CHECKER 1: Gabaabbina lakkofsichaa (Yoo gabaabaa ta'e soba)
+    if len(input_tx) < 8 or not input_tx.isalnum():
+        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi daddabarsaa ati galchite sirrii miti ykn baay'ee gabaabaadha. Maaloo lakkofsa sirrii galchi.")
         return
 
-    # 🔒 CHECKER 2: Duraan itti hojjetameera yoo ta'e (Soba/Gowwoomsaa)
+    # 🔒 CHECKER 2: Duraan itti hojjetameera yoo ta'e (Gowwoomsaa)
     if input_tx in USED_TRANSACTIONS:
         bot.reply_to(message, "❌ Dogoggora: Lakkoofsi kaffaltii kun duraan tajaajila biraaf itti hojjetameera! Gowwoomsaan dhowwamaadha.")
         return
