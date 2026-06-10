@@ -1,4 +1,2 @@
 pyTelegramBotAPI
-Pillow
-opencv-python-headless
-numpy
+Pillow==10.3.0
