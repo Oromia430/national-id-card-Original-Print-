@@ -1,6 +1,6 @@
 import os
 import telebot
-from PIL import Image
+from PIL import Image, ImageOps
 
 # 🔑 CONFIGURATION
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8974775722:AAEdkBUxx02cwzLLzGT6Fa5hqSWtveqGz6A')  
@@ -11,22 +11,26 @@ bot = telebot.TeleBot(TOKEN)
 USER_STATES = {}   
 USER_IMAGES = {}   
 PAID_USERS = {}    
-
-# 🗄️ TRANSACTION DATABASE (Kaffaltii daddabalame ittisuuf)
 USED_TRANSACTIONS = set()
 
-# --- HOJII FAKKII VERTICAL ORIGINAL QAJEELCHUU ---
+def fix_image_orientation(img):
+    """Fakkicha exif data isaa hordofee ol garagalcha (otoo hin dhiphisin)"""
+    try:
+        return ImageOps.exif_transpose(img)
+    except Exception:
+        return img
 
-def process_vertical_card(image_path, target_w=638, target_h=1011):
-    """Screenshot guutuu keessaa kaardicha bifa original vertical ta'een qofa muree baasa"""
+def crop_original_proportions(image_path, target_w=638, target_h=1011):
+    """Screenshot keessaa kaardicha bifa original vertical ta'een muree baasa, hin dhiphisu"""
     img = Image.open(image_path)
+    img = fix_image_orientation(img)
     w_orig, h_orig = img.size
     
     # 1. Screenshot gubbaa fi jala irraa UI qulqulleessuuf muruu
-    left = int(w_orig * 0.03)
-    top = int(h_orig * 0.12)
-    right = int(w_orig * 0.97)
-    bottom = int(h_orig * 0.86)
+    left = int(w_orig * 0.04)
+    top = int(h_orig * 0.14)
+    right = int(w_orig * 0.96)
+    bottom = int(h_orig * 0.84)
     cropped_img = img.crop((left, top, right, bottom))
     
     # 2. Aspect Ratio bifa vertical original ($638 \times 1011$) eeguu
@@ -35,12 +39,10 @@ def process_vertical_card(image_path, target_w=638, target_h=1011):
     current_ratio = crop_w / crop_h
     
     if current_ratio > target_ratio:
-        # Fakkichi baay'ee yoo bal'ate bitaa fi mirgatti qajeelchuu
         new_width = int(target_ratio * crop_h)
         offset = (crop_w - new_width) // 2
         final_cropped = cropped_img.crop((offset, 0, crop_w - offset, crop_h))
     else:
-        # Fakkichi baay'ee yoo dheerate gubbaa fi jalatti qajeelchuu
         new_height = int(crop_w / target_ratio)
         offset = (crop_h - new_height) // 2
         final_cropped = cropped_img.crop((0, offset, crop_w, crop_h - offset))
@@ -49,20 +51,19 @@ def process_vertical_card(image_path, target_w=638, target_h=1011):
 
 def create_final_id_template(front_path, back_path, output_path):
     """Fuulduraa fi duubaa otoo hin dhiphisin bifa original vertical ta'een walbira qaba"""
-    front_final = process_vertical_card(front_path)
-    back_final = process_vertical_card(back_path)
+    front_final = crop_original_proportions(front_path)
+    back_final = crop_original_proportions(back_path)
     
-    # Standard CR-80 Vertical Size (Akkuma original fakkii ati ergitee)
+    # Standard Vertical Size
     card_w, card_h = 638, 1011
     margin_x = 60  
     margin_y = 90  
     
-    # Canvas bal'aa fakkii lamaan bifa qajeelaan qabatu qopheessuu
     canvas_w = (card_w * 2) + (margin_x * 3)
     canvas_h = card_h + (margin_y * 2)
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     
-    # Maxxansuu (Fuuldura = Bitaa, Duuba = Mirga) bifa qajeelaan otoo hin dhiphatin
+    # Maxxansuu bifa qajeelaan (Alabaan gara olii akka ta'utti)
     canvas.paste(front_final, (margin_x, margin_y))
     canvas.paste(back_final, (card_w + (margin_x * 2), margin_y))
     
@@ -95,7 +96,7 @@ def start_cmd(message):
 def handle_callbacks(call):
     user_id = call.from_user.id
     USER_STATES[user_id] = 'Eegaa_Transaction_Number'
-    bot.send_message(user_id, "✍️ Maaloo lakkoofsa daddabarsaa kaffaltii keetii (**Transaction ID / Ref Number**) guutummaatti asirratti barreessii ergi.\n\nFakkeenya: `DFA0RZLEIA` ykn `FT26162HX8P3`")
+    bot.send_message(user_id, "✍️ Maaloo lakkoofsa daddabarsaa kaffaltii keetii (**Transaction ID / Ref Number**) guutummaatti asirratti barreessii ergi.\n\nFakkeenya: `DFA0RZLEIA`")
 
 
 @bot.message_handler(func=lambda message: USER_STATES.get(message.from_user.id) == 'Eegaa_Transaction_Number')
@@ -103,14 +104,12 @@ def verify_transaction_number(message):
     user_id = message.from_user.id
     input_tx = message.text.strip().upper()
     
-    # 🔒 CHECKER 1: Gowwoomsaa lakkofsa gabaabaa ittisuu
     if len(input_tx) < 8 or not input_tx.isalnum():
-        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi daddabarsaa ati galchite sirrii miti ykn baay'ee gabaabaadha. Maaloo lakkofsa sirrii galchi.")
+        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi daddabarsaa ati galchite sirrii miti. Maaloo lakkofsa sirrii galchi.")
         return
 
-    # 🔒 CHECKER 2: Lakkofsa tokko daddabalanii fayyadamuu ittisuu
     if input_tx in USED_TRANSACTIONS:
-        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi kaffaltii kun duraan tajaajila biraaf itti hojjetameera! Gowwoomsaan dhowwamaadha.")
+        bot.reply_to(message, "❌ Dogoggora: Lakkoofsi kaffaltii kun duraan itti hojjetameera!")
         return
         
     USED_TRANSACTIONS.add(input_tx)
@@ -118,10 +117,6 @@ def verify_transaction_number(message):
     USER_STATES[user_id] = 'Eegaa_Fuulduraa'
     
     bot.reply_to(message, "🎉 Kaffaltiin keessan mirkanaa'eera! Amma hojii ni jalqabna.\n\n👉 Maaloo fakkii ID keetii kan *GARA FUULDURAA* (Front) ergi.")
-    try:
-        bot.send_message(ADMIN_ID, f"🔔 [APPROVED]: User {user_id} lakkoofsa `{input_tx}` kaffaltii raawwateera.")
-    except Exception:
-        pass
 
 
 @bot.message_handler(content_types=['photo'])
@@ -175,7 +170,5 @@ def handle_id_photos(message):
         except Exception as e:
             bot.reply_to(message, f"Dogoggora uumameera: {str(e)}")
 
-# Webhook qulqulleessuu fi dammaqsuu
 bot.remove_webhook()
-print("Botiin kee haaraatti qophaa'eera...")
 bot.infinity_polling(skip_pending=True)
