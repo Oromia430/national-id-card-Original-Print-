@@ -2,7 +2,7 @@ import os
 import telebot
 from PIL import Image, ImageOps
 
-# 🔑 CONFIGURATION
+# 🔑 ENVIRONMENT VARIABLES
 TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8974775722:AAEdkBUxx02cwzLLzGT6Fa5hqSWtveqGz6A')  
 ADMIN_ID = int(os.environ.get('ADMIN_CHAT_ID', 123654987))
 
@@ -14,26 +14,25 @@ PAID_USERS = {}
 USED_TRANSACTIONS = set()
 
 def fix_image_orientation(img):
-    """Fakkicha exif data isaa hordofee ol garagalcha (otoo hin dhiphisin)"""
+    """Exif data fakkichaa hordofee ol garagalcha"""
     try:
         return ImageOps.exif_transpose(img)
     except Exception:
         return img
 
-def crop_original_proportions(image_path, target_w=638, target_h=1011):
-    """Screenshot keessaa kaardicha bifa original vertical ta'een muree baasa, hin dhiphisu"""
+def process_vertical_card(image_path, target_w=638, target_h=1011):
+    """Screenshot irraa kaardicha bifa original vertical ta'een muree baasa"""
     img = Image.open(image_path)
     img = fix_image_orientation(img)
     w_orig, h_orig = img.size
     
-    # 1. Screenshot gubbaa fi jala irraa UI qulqulleessuuf muruu
+    # UI screenshot gubbaa fi jala jiru ballessuuf muruu
     left = int(w_orig * 0.04)
     top = int(h_orig * 0.14)
     right = int(w_orig * 0.96)
     bottom = int(h_orig * 0.84)
     cropped_img = img.crop((left, top, right, bottom))
     
-    # 2. Aspect Ratio bifa vertical original ($638 \times 1011$) eeguu
     target_ratio = target_w / target_h
     crop_w, crop_h = cropped_img.size
     current_ratio = crop_w / crop_h
@@ -50,11 +49,10 @@ def crop_original_proportions(image_path, target_w=638, target_h=1011):
     return final_cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
 def create_final_id_template(front_path, back_path, output_path):
-    """Fuulduraa fi duubaa otoo hin dhiphisin bifa original vertical ta'een walbira qaba"""
-    front_final = crop_original_proportions(front_path)
-    back_final = crop_original_proportions(back_path)
+    """Fuulduraa fi duubaa otoo hin dhiphisin bifa template vertical eegameen walbira qaba"""
+    front_final = process_vertical_card(front_path)
+    back_final = process_vertical_card(back_path)
     
-    # Standard Vertical Size
     card_w, card_h = 638, 1011
     margin_x = 60  
     margin_y = 90  
@@ -63,14 +61,14 @@ def create_final_id_template(front_path, back_path, output_path):
     canvas_h = card_h + (margin_y * 2)
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     
-    # Maxxansuu bifa qajeelaan (Alabaan gara olii akka ta'utti)
+    # Maxxansuu (Fuuldura = Bitaa, Duuba = Mirga, Alabaan gara olii)
     canvas.paste(front_final, (margin_x, margin_y))
     canvas.paste(back_final, (card_w + (margin_x * 2), margin_y))
     
     canvas.save(output_path, "JPEG", quality=100, subsampling=0)
 
 
-# --- TELEGRAM BOT HANDLERS ---
+# --- BOT HANDLERS ---
 
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
