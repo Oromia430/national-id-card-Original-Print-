@@ -6,8 +6,10 @@ from PIL import Image
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # 🔑 CONFIGURATION
-TOKEN = 'KESSAN_TELEGRAM_BOT_TOKEN_AS_KAAYAA'
-ADMIN_ID = 123456789  # Chat ID kee as keessa kaa'i
+# Render irratti Environment Variables keessatti itti dabinna. 
+# Yoo achi dides, Token kee sirriitti mallattoo ':' qabaachuu isaa mirkaneeffadhuu as keessa kaa'i.
+TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '7238260846:AAFlYgXpYl2gXvOz_VfP2M7wWhxEXAMPLE')  
+ADMIN_ID = 123456789  # Chat ID kee (Elias) as keessa kaa'i lakkofsa qofa
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -16,25 +18,25 @@ USER_STATES = {}
 USER_IMAGES = {}   
 PAID_USERS = {}    
 
-# --- HOJII ADVANCED IMAGE PROCESSING ---
+# --- HOJII IMAGE PROCESSING (CROP & ALIGN) ---
 
 def auto_crop_id(image_path):
-    """Fakkii screenshot keessaa kaardii Fayda ID qofa addaan baasa"""
+    """Fakkii screenshot keessaa kaardii Fayda ID qofa bifa sirriin addaan baasa"""
     img = cv2.imread(image_path)
     if img is None:
         return None
         
     h_orig, w_orig, _ = img.shape
     
-    # Iskiriinshotii gubbaa fi jala irraa buttons ballessuuf (7% - 15% hanqisuu)
+    # Gubbaa fi jala irraa kofalchiftoota bilbilaa (buttons) muranii balleessuu
     start_x = int(w_orig * 0.05)
-    start_y = int(h_orig * 0.13)
+    start_y = int(h_orig * 0.14)
     end_x = int(w_orig * 0.95)
-    end_y = int(h_orig * 0.83)
+    end_y = int(h_orig * 0.84)
     
     cropped = img[start_y:end_y, start_x:end_x]
     
-    # Sharpness dabaluu (Qubee dammaqsuuf)
+    # Qulqullina qubeewwanii dabaluu (Sharpening Filter)
     kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
     enhanced = cv2.filter2D(cropped, -1, kernel)
     return enhanced
@@ -44,11 +46,11 @@ def create_final_id_template(front_path, back_path, output_path):
     front_cv = auto_crop_id(front_path)
     back_cv = auto_crop_id(back_path)
     
-    # OpenCV to Pillow Image
+    # OpenCV to Pillow Image geeddaruu
     front_pil = Image.fromarray(cv2.cvtColor(front_cv, cv2.COLOR_BGR2RGB))
     back_pil = Image.fromarray(cv2.cvtColor(back_cv, cv2.COLOR_BGR2RGB))
     
-    # Standard ID size (1011 x 638 Pixels - CR-80)
+    # Standard CR-80 Size ($1011 \times 638$ Pixels)
     card_w, card_h = 1011, 638
     front_final = front_pil.resize((card_w, card_h), Image.Resampling.LANCZOS)
     back_final = back_pil.resize((card_w, card_h), Image.Resampling.LANCZOS)
@@ -61,7 +63,7 @@ def create_final_id_template(front_path, back_path, output_path):
     canvas_h = card_h + (margin_y * 2)
     canvas = Image.new("RGB", (canvas_w, canvas_h), (255, 255, 255))
     
-    # Maxxansuu (Bifa Sirrii Kofni isaa hin garagalleen)
+    # Fakkiiwwan bifa sirriin walbira kaa'uu (Kofni isaanii akka hin garagalleef)
     canvas.paste(front_final, (margin_x, margin_y))
     canvas.paste(back_final, (card_w + (margin_x * 2), margin_y))
     
@@ -94,7 +96,7 @@ def start_cmd(message):
 def handle_callbacks(call):
     user_id = call.from_user.id
     USER_STATES[user_id] = 'Eegaa_Transaction_Number'
-    bot.send_message(user_id, "✍️ Maaloo lakkoofsa daddabarsaa kaffaltii keetii (**Transaction ID / Ref Number**) guutummaatti asirratti barreessii ergi.\n\nFakkeenya: `FT26162HX8P3` ykn `TXN98765432`")
+    bot.send_message(user_id, "✍️ Maaloo lakkoofsa daddabarsaa kaffaltii keetii (**Transaction ID / Ref Number**) guutummaatti asirratti barreessii ergi.\n\nFakkeenya: `DFA0RZLEIA` ykn `FT26162HX8P3`")
 
 
 @bot.message_handler(func=lambda message: USER_STATES.get(message.from_user.id) == 'Eegaa_Transaction_Number')
@@ -102,16 +104,18 @@ def verify_transaction_number(message):
     user_id = message.from_user.id
     input_tx = message.text.strip()
     
-    # 🔥 GADI FAGEENYAAN FOYYA'E: 
-    # Namni sun koodii kaffaltii dheerina qubee 6 ol jiru kamiyyuu yoo barreesse Automatically ni tikfata (Accept godha)!
+    # AUTOMATIC APPROVAL LOGIC (Jecha dheerina qubee 6 ol jiru kamiyyuu ni fudhata)
     if len(input_tx) >= 6:
         PAID_USERS[user_id] = True
         USER_STATES[user_id] = 'Eegaa_Fuulduraa'
         
         bot.reply_to(message, "🎉 Kaffaltiin keessan of-caalaatti mirkanaa'eera! Hojii keenya ni jalqabna.\n\n👉 Maaloo fakkii ID keetii kan *GARA FUULDURAA* (Front) ergi.")
-        bot.send_message(ADMIN_ID, f"🔔 [AUTO-APPROVED]: User {user_id} lakkoofsa `{input_tx}` tajaajila baneera.")
+        try:
+            bot.send_message(ADMIN_ID, f"🔔 [AUTO-APPROVED]: User {user_id} lakkoofsa `{input_tx}` tajaajila baneera.")
+        except Exception:
+            pass
     else:
-        bot.reply_to(message, "❌ Lakkoofsi daddabarsaa ati ergite sirrii miti. Maaloo lakkofsa guutuu galchi.")
+        bot.reply_to(message, "❌ Lakkoofsi daddabarsaa ati ergite sirrii miti. Maaloo lakkofsa sirrii galchi.")
 
 
 @bot.message_handler(content_types=['photo'])
@@ -142,7 +146,7 @@ def handle_id_photos(message):
             f.write(downloaded)
             
         USER_IMAGES[user_id]['back'] = back_path
-        bot.reply_to(message, "⏳ Nu eegi, fakkicha qulqulleessinee template bogaa qopheessaa jirra...")
+        bot.reply_to(message, "⏳ Nu eegi, fakkicha qulqulleessinee dizaayinii isaa sirreessaa jirra...")
         
         try:
             front = USER_IMAGES[user_id]['front']
@@ -154,8 +158,9 @@ def handle_id_photos(message):
             
             # Fakkii qophaa'e deebisanii erguu
             with open(output_final, 'rb') as photo:
-                bot.send_photo(user_id, photo, caption="🎉 Kunoo Fayda ID keessan bifa kanaan print-fii qophaa'eera!")
+                bot.send_photo(user_id, photo, caption="🎉 Kunoo Fayda ID keessan bifa kanaan print-fii qophaa'eera! Hojii gaarii.")
                 
+            # Files irraa qulqulleessuu
             os.remove(front)
             os.remove(back)
             os.remove(output_final)
